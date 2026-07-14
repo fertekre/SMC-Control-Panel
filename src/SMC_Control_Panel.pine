@@ -1,11 +1,183 @@
 //@version=6
 indicator("SMC Control Panel v0.0.1", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
-// ============================================================================
+//=============================================================================
 // SMC CONTROL PANEL
 // Version : v0.0.1
 // Status  : Foundation
-// ============================================================================
+//=============================================================================
 
-// Bu sürüm yalnızca proje altyapısını içerir.
-// Sonraki sürümlerde BOS, CHOCH, Trend, Dashboard ve diğer modüller eklenecektir.
+//=============================================================================
+// GLOBAL CONSTANTS
+//=============================================================================
+
+string VERSION = "v0.0.1"
+
+string TF_15M = "15"
+string TF_1H  = "60"
+string TF_4H  = "240"
+
+//=============================================================================
+// COLORS
+//=============================================================================
+
+color COLOR_BULL     = color.rgb(0, 200, 83)
+color COLOR_BEAR     = color.rgb(229, 57, 53)
+color COLOR_NEUTRAL  = color.rgb(158, 158, 158)
+
+color PANEL_BG       = color.new(color.black, 10)
+color PANEL_HEADER   = color.rgb(35, 35, 35)
+color PANEL_BORDER   = color.rgb(70, 70, 70)
+
+//=============================================================================
+// INPUTS
+//=============================================================================
+
+groupDashboard = "Dashboard"
+
+showDashboard = input.bool(true, "Dashboard", group=groupDashboard)
+
+dashboardPosition = input.string(
+     "Top Right",
+     "Position",
+     options=[
+        "Top Right",
+        "Top Left",
+        "Bottom Right",
+        "Bottom Left"],
+     group=groupDashboard)
+
+groupObjects = "Objects"
+
+maxActiveFVG = input.int(3, "Maximum Active FVG", minval=1, maxval=20, group=groupObjects)
+maxActiveOB  = input.int(2, "Maximum Active Order Block", minval=1, maxval=20, group=groupObjects)
+maxActiveBB  = input.int(2, "Maximum Active Breaker Block", minval=1, maxval=20, group=groupObjects)
+maxSupply    = input.int(1, "Maximum Supply", minval=1, maxval=10, group=groupObjects)
+maxDemand    = input.int(1, "Maximum Demand", minval=1, maxval=10, group=groupObjects)
+
+groupRSI = "RSI"
+
+rsiLength = input.int(14, "Length", minval=2, group=groupRSI)
+rsiOB     = input.int(70, "OverBought", group=groupRSI)
+rsiOS     = input.int(30, "OverSold", group=groupRSI)
+
+//=============================================================================
+// MULTI TIMEFRAME DATA ENGINE
+//=============================================================================
+
+float cClose = close
+float cHigh  = high
+float cLow   = low
+
+float close15 = request.security(syminfo.tickerid, TF_15M, close)
+float high15  = request.security(syminfo.tickerid, TF_15M, high)
+float low15   = request.security(syminfo.tickerid, TF_15M, low)
+
+float close1H = request.security(syminfo.tickerid, TF_1H, close)
+float high1H  = request.security(syminfo.tickerid, TF_1H, high)
+float low1H   = request.security(syminfo.tickerid, TF_1H, low)
+
+float close4H = request.security(syminfo.tickerid, TF_4H, close)
+float high4H  = request.security(syminfo.tickerid, TF_4H, high)
+float low4H   = request.security(syminfo.tickerid, TF_4H, low)
+
+float rsi15 = request.security(syminfo.tickerid, TF_15M, ta.rsi(close, rsiLength))
+float rsi1H = request.security(syminfo.tickerid, TF_1H, ta.rsi(close, rsiLength))
+float rsi4H = request.security(syminfo.tickerid, TF_4H, ta.rsi(close, rsiLength))
+
+f_getRSIStatus(float value) =>
+    string result = "Neutral"
+    if value >= rsiOB
+        result := "OverBought"
+    else if value <= rsiOS
+        result := "OverSold"
+    result
+
+string rsiStatus15 = f_getRSIStatus(rsi15)
+string rsiStatus1H = f_getRSIStatus(rsi1H)
+string rsiStatus4H = f_getRSIStatus(rsi4H)
+
+//=============================================================================
+// GLOBAL STATE VARIABLES
+//=============================================================================
+
+var string trend15 = "Neutral"
+var string trend1H = "Neutral"
+var string trend4H = "Neutral"
+
+var string lastBos15 = "-"
+var string lastBos1H = "-"
+var string lastBos4H = "-"
+
+var string lastChoch15 = "-"
+var string lastChoch1H = "-"
+var string lastChoch4H = "-"
+
+var int score15 = 0
+var int score1H = 0
+var int score4H = 0
+
+//=============================================================================
+// OBJECT ARRAYS (Future Modules)
+//=============================================================================
+
+var array<box> bullishFVG = array.new_box()
+var array<box> bearishFVG = array.new_box()
+
+var array<box> bullishOB = array.new_box()
+var array<box> bearishOB = array.new_box()
+
+var array<box> bullishBB = array.new_box()
+var array<box> bearishBB = array.new_box()
+
+var array<box> supplyZones = array.new_box()
+var array<box> demandZones = array.new_box()
+
+//=============================================================================
+// SMC ENGINE
+// Trend Bias Foundation
+//=============================================================================
+
+f_trend(float closePrice, float emaFast, float emaSlow) =>
+    string trend = "NEUTRAL"
+    if emaFast > emaSlow and closePrice > emaFast
+        trend := "BULLISH"
+    else if emaFast < emaSlow and closePrice < emaFast
+        trend := "BEARISH"
+    trend
+
+//=============================================================================
+// EMA ENGINE
+//=============================================================================
+
+ema50_15 = request.security(syminfo.tickerid, TF_15M, ta.ema(close, 50))
+ema200_15 = request.security(syminfo.tickerid, TF_15M, ta.ema(close, 200))
+
+ema50_1H = request.security(syminfo.tickerid, TF_1H, ta.ema(close, 50))
+ema200_1H = request.security(syminfo.tickerid, TF_1H, ta.ema(close, 200))
+
+ema50_4H = request.security(syminfo.tickerid, TF_4H, ta.ema(close, 50))
+ema200_4H = request.security(syminfo.tickerid, TF_4H, ta.ema(close, 200))
+
+trend15 := f_trend(close15, ema50_15, ema200_15)
+trend1H := f_trend(close1H, ema50_1H, ema200_1H)
+trend4H := f_trend(close4H, ema50_4H, ema200_4H)
+
+score15 := 0
+score1H := 0
+score4H := 0
+
+if trend15 == "BULLISH"
+    score15 += 20
+if trend15 == "BEARISH"
+    score15 += 20
+
+if trend1H == "BULLISH"
+    score1H += 20
+if trend1H == "BEARISH"
+    score1H += 20
+
+if trend4H == "BULLISH"
+    score4H += 20
+if trend4H == "BEARISH"
+    score4H += 20
