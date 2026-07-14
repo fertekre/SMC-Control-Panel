@@ -1,0 +1,11 @@
+//@version=6
+indicator("SMC Control Panel v0.0.1", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// ============================================================================
+// SMC CONTROL PANEL
+// Version : v0.0.1
+// Status  : Foundation
+// ============================================================================
+
+// Bu sürüm yalnızca proje altyapısını içerir.
+// Sonraki sürümlerde BOS, CHOCH, Trend, Dashboard ve diğer modüller eklenecektir.
