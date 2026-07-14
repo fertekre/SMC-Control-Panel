@@ -7,5 +7,767 @@ indicator("SMC Control Panel v0.0.1", overlay=true, max_boxes_count=500, max_lin
 // Status  : Foundation
 // ============================================================================
 
-// Bu sürüm yalnızca proje altyapısını içerir.
-// Sonraki sürümlerde BOS, CHOCH, Trend, Dashboard ve diğer modüller eklenecektir.
+//@version=6
+indicator(
+     title = "SMC Control Panel",
+     shorttitle = "SMC CP",
+     overlay = true,
+     max_boxes_count = 500,
+     max_lines_count = 500,
+     max_labels_count = 500)
+
+//=============================================================================
+// SMC CONTROL PANEL
+// Version : v0.0.1
+// Status  : Development
+// Pine    : Version 6
+//=============================================================================
+
+//=============================================================================
+// TIMEFRAMES
+//=============================================================================
+
+const string TF_4H  = "240"
+const string TF_1H  = "60"
+const string TF_15M = "15"
+
+//=============================================================================
+// COLORS
+//=============================================================================
+
+color BullColor      = color.lime
+color BearColor      = color.red
+color NeutralColor   = color.gray
+color PanelBg        = color.new(color.black, 10)
+color HeaderBg       = color.rgb(35,35,35)
+color BorderColor    = color.rgb(70,70,70)
+
+//=============================================================================
+// LIMIT SETTINGS
+//=============================================================================
+
+maxFVG =
+    input.int(
+         3,
+         "Maximum Active FVG",
+         minval = 1,
+         maxval = 20,
+         group = "Objects")
+
+maxOB =
+    input.int(
+         2,
+         "Maximum Active Order Blocks",
+         minval = 1,
+         maxval = 20,
+         group = "Objects")
+
+maxBB =
+    input.int(
+         2,
+         "Maximum Active Breaker Blocks",
+         minval = 1,
+         maxval = 20,
+         group = "Objects")
+
+maxSupply =
+    input.int(
+         1,
+         "Maximum Supply Zones",
+         minval = 1,
+         maxval = 10,
+         group = "Objects")
+
+maxDemand =
+    input.int(
+         1,
+         "Maximum Demand Zones",
+         minval = 1,
+         maxval = 10,
+         group = "Objects")
+//=============================================================================
+// DASHBOARD SETTINGS
+//=============================================================================
+
+dashboardGroup = "Dashboard"
+
+showDashboard =
+    input.bool(
+         true,
+         "Show Dashboard",
+         group = dashboardGroup)
+
+dashboardPosition =
+    input.string(
+         "Top Right",
+         "Position",
+         options = [
+             "Top Right",
+             "Top Left",
+             "Bottom Right",
+             "Bottom Left"
+         ],
+         group = dashboardGroup)
+
+dashboardSize =
+    input.string(
+         "Normal",
+         "Size",
+         options = [
+             "Small",
+             "Normal",
+             "Large"
+         ],
+         group = dashboardGroup)
+
+//=============================================================================
+// RSI SETTINGS
+//=============================================================================
+
+rsiGroup = "RSI"
+
+rsiLength =
+    input.int(
+         14,
+         "RSI Length",
+         minval = 2,
+         group = rsiGroup)
+
+rsiOverBought =
+    input.int(
+         70,
+         "Overbought",
+         group = rsiGroup)
+
+rsiOverSold =
+    input.int(
+         30,
+         "Oversold",
+         group = rsiGroup)
+
+//=============================================================================
+// TABLE SIZE
+//=============================================================================
+
+tableTextSize =
+     dashboardSize == "Small"
+     ? size.small
+     : dashboardSize == "Large"
+     ? size.large
+     : size.normal
+
+//=============================================================================
+// TABLE POSITION
+//=============================================================================
+
+tablePosition =
+     dashboardPosition == "Top Left"
+     ? position.top_left
+     : dashboardPosition == "Bottom Left"
+     ? position.bottom_left
+     : dashboardPosition == "Bottom Right"
+     ? position.bottom_right
+     : position.top_right
+
+//=============================================================================
+// DASHBOARD
+//=============================================================================
+
+var table dashboard =
+     table.new(
+          tablePosition,
+          4,
+          5,
+          border_width = 1,
+          frame_color = BorderColor,
+          border_color = BorderColor)
+
+//=============================================================================
+// HEADER
+//=============================================================================
+
+if barstate.isfirst and showDashboard
+
+    table.cell(
+         dashboard,
+         0,
+         0,
+         "SMC CONTROL PANEL",
+         bgcolor = HeaderBg,
+         text_color = color.white,
+         text_size = tableTextSize)
+
+    table.cell(
+         dashboard,
+         1,
+         0,
+         "4H",
+         bgcolor = HeaderBg,
+         text_color = color.white,
+         text_size = tableTextSize)
+
+    table.cell(
+         dashboard,
+         2,
+         0,
+         "1H",
+         bgcolor = HeaderBg,
+         text_color = color.white,
+         text_size = tableTextSize)
+
+    table.cell(
+         dashboard,
+         3,
+         0,
+         "15M",
+         bgcolor = HeaderBg,
+         text_color = color.white,
+         text_size = tableTextSize)
+//=============================================================================
+// MULTI TIMEFRAME ENGINE
+//=============================================================================
+
+//--------------- PRICE DATA ---------------//
+
+close4H = request.security(syminfo.tickerid, TF_4H, close)
+high4H  = request.security(syminfo.tickerid, TF_4H, high)
+low4H   = request.security(syminfo.tickerid, TF_4H, low)
+
+close1H = request.security(syminfo.tickerid, TF_1H, close)
+high1H  = request.security(syminfo.tickerid, TF_1H, high)
+low1H   = request.security(syminfo.tickerid, TF_1H, low)
+
+close15 = request.security(syminfo.tickerid, TF_15M, close)
+high15  = request.security(syminfo.tickerid, TF_15M, high)
+low15   = request.security(syminfo.tickerid, TF_15M, low)
+
+//=============================================================================
+// RSI ENGINE
+//=============================================================================
+
+rsi4H =
+    request.security(
+        syminfo.tickerid,
+        TF_4H,
+        ta.rsi(close, rsiLength))
+
+rsi1H =
+    request.security(
+        syminfo.tickerid,
+        TF_1H,
+        ta.rsi(close, rsiLength))
+
+rsi15 =
+    request.security(
+        syminfo.tickerid,
+        TF_15M,
+        ta.rsi(close, rsiLength))
+
+//=============================================================================
+// RSI STATUS
+//=============================================================================
+
+f_rsiStatus(float value)=>
+
+    value >= rsiOverBought
+        ? "OVERBOUGHT"
+        : value <= rsiOverSold
+        ? "OVERSOLD"
+        : "NEUTRAL"
+
+rsiStatus4H = f_rsiStatus(rsi4H)
+rsiStatus1H = f_rsiStatus(rsi1H)
+rsiStatus15 = f_rsiStatus(rsi15)
+
+//=============================================================================
+// TREND VARIABLES
+//=============================================================================
+
+var string trend4H = "NEUTRAL"
+var string trend1H = "NEUTRAL"
+var string trend15 = "NEUTRAL"
+
+var string lastBos4H = "-"
+var string lastBos1H = "-"
+var string lastBos15 = "-"
+
+var string lastChoch4H = "-"
+var string lastChoch1H = "-"
+var string lastChoch15 = "-"
+
+//=============================================================================
+// SETUP SCORE
+//=============================================================================
+
+var int setupScore4H = 0
+var int setupScore1H = 0
+var int setupScore15 = 0
+//=============================================================================
+// PANEL ROW TITLES
+//=============================================================================
+
+if barstate.isfirst and showDashboard
+
+    table.cell(
+         dashboard,
+         0,
+         1,
+         "Trend",
+         bgcolor = PanelBg,
+         text_color = color.white,
+         text_size = tableTextSize)
+
+    table.cell(
+         dashboard,
+         0,
+         2,
+         "Last BOS",
+         bgcolor = PanelBg,
+         text_color = color.white,
+         text_size = tableTextSize)
+
+    table.cell(
+         dashboard,
+         0,
+         3,
+         "Last CHOCH",
+         bgcolor = PanelBg,
+         text_color = color.white,
+         text_size = tableTextSize)
+
+    table.cell(
+         dashboard,
+         0,
+         4,
+         "RSI",
+         bgcolor = PanelBg,
+         text_color = color.white,
+         text_size = tableTextSize)
+
+    table.cell(
+         dashboard,
+         0,
+         5,
+         "Score",
+         bgcolor = PanelBg,
+         text_color = color.white,
+         text_size = tableTextSize)
+
+
+//=============================================================================
+// COLOR FUNCTIONS
+//=============================================================================
+
+fTrendColor(string value)=>
+
+    value == "BULLISH"
+        ? BullColor
+        : value == "BEARISH"
+        ? BearColor
+        : NeutralColor
+
+
+fRsiColor(string value)=>
+
+    value == "OVERBOUGHT"
+        ? BearColor
+        : value == "OVERSOLD"
+        ? BullColor
+        : NeutralColor
+
+
+fBosColor(string value)=>
+
+    value == "BULLISH"
+        ? BullColor
+        : value == "BEARISH"
+        ? BearColor
+        : NeutralColor
+
+
+fChochColor(string value)=>
+
+    value == "BULLISH"
+        ? BullColor
+        : value == "BEARISH"
+        ? BearColor
+        : NeutralColor
+
+
+//=============================================================================
+// PLACEHOLDER PANEL
+//=============================================================================
+
+if barstate.islast and showDashboard
+
+    //---------------- 4H ----------------//
+
+    table.cell(dashboard,1,1,trend4H,text_color=fTrendColor(trend4H))
+    table.cell(dashboard,1,2,lastBos4H,text_color=fBosColor(lastBos4H))
+    table.cell(dashboard,1,3,lastChoch4H,text_color=fChochColor(lastChoch4H))
+    table.cell(dashboard,1,4,rsiStatus4H,text_color=fRsiColor(rsiStatus4H))
+    table.cell(dashboard,1,5,str.tostring(setupScore4H),text_color=color.white)
+
+    //---------------- 1H ----------------//
+
+    table.cell(dashboard,2,1,trend1H,text_color=fTrendColor(trend1H))
+    table.cell(dashboard,2,2,lastBos1H,text_color=fBosColor(lastBos1H))
+    table.cell(dashboard,2,3,lastChoch1H,text_color=fChochColor(lastChoch1H))
+    table.cell(dashboard,2,4,rsiStatus1H,text_color=fRsiColor(rsiStatus1H))
+    table.cell(dashboard,2,5,str.tostring(setupScore1H),text_color=color.white)
+
+    //---------------- 15M ----------------//
+
+    table.cell(dashboard,3,1,trend15,text_color=fTrendColor(trend15))
+    table.cell(dashboard,3,2,lastBos15,text_color=fBosColor(lastBos15))
+    table.cell(dashboard,3,3,lastChoch15,text_color=fChochColor(lastChoch15))
+    table.cell(dashboard,3,4,rsiStatus15,text_color=fRsiColor(rsiStatus15))
+    table.cell(dashboard,3,5,str.tostring(setupScore15),text_color=color.white)
+//=============================================================================
+// GLOBAL CONSTANTS
+//=============================================================================
+
+string VERSION = "v0.0.1"
+
+// Timeframes
+string TF_15M = "15"
+string TF_1H  = "60"
+string TF_4H  = "240"
+
+//=============================================================================
+// COLORS
+//=============================================================================
+
+color COLOR_BULL     = color.rgb(0,200,83)
+color COLOR_BEAR     = color.rgb(229,57,53)
+color COLOR_NEUTRAL  = color.rgb(158,158,158)
+
+color PANEL_BG       = color.new(color.black,10)
+color PANEL_HEADER   = color.rgb(35,35,35)
+color PANEL_BORDER   = color.rgb(70,70,70)
+
+//=============================================================================
+// INPUTS
+//=============================================================================
+
+groupDashboard = "Dashboard"
+
+showDashboard = input.bool(true,"Dashboard",group=groupDashboard)
+
+dashboardPosition = input.string(
+     "Top Right",
+     "Position",
+     options=[
+        "Top Right",
+        "Top Left",
+        "Bottom Right",
+        "Bottom Left"],
+     group=groupDashboard)
+
+groupObjects = "Objects"
+
+maxActiveFVG =
+     input.int(
+        3,
+        "Maximum Active FVG",
+        minval=1,
+        maxval=20,
+        group=groupObjects)
+
+maxActiveOB =
+     input.int(
+        2,
+        "Maximum Active Order Block",
+        minval=1,
+        maxval=20,
+        group=groupObjects)
+
+maxActiveBB =
+     input.int(
+        2,
+        "Maximum Active Breaker Block",
+        minval=1,
+        maxval=20,
+        group=groupObjects)
+
+maxSupply =
+     input.int(
+        1,
+        "Maximum Supply",
+        minval=1,
+        maxval=10,
+        group=groupObjects)
+
+maxDemand =
+     input.int(
+        1,
+        "Maximum Demand",
+        minval=1,
+        maxval=10,
+        group=groupObjects)
+
+//=============================================================================
+// RSI
+//=============================================================================
+
+groupRSI = "RSI"
+
+rsiLength =
+     input.int(
+        14,
+        "Length",
+        minval=2,
+        group=groupRSI)
+
+rsiOB =
+     input.int(
+        70,
+        "OverBought",
+        group=groupRSI)
+
+rsiOS =
+     input.int(
+        30,
+        "OverSold",
+        group=groupRSI)
+//=============================================================================
+// MULTI TIMEFRAME DATA ENGINE
+//=============================================================================
+
+//---------------- CURRENT TF ----------------//
+
+float cClose = close
+float cHigh  = high
+float cLow   = low
+
+//---------------- 15M ----------------//
+
+float close15 =
+    request.security(
+        syminfo.tickerid,
+        TF_15M,
+        close)
+
+float high15 =
+    request.security(
+        syminfo.tickerid,
+        TF_15M,
+        high)
+
+float low15 =
+    request.security(
+        syminfo.tickerid,
+        TF_15M,
+        low)
+
+//---------------- 1H ----------------//
+
+float close1H =
+    request.security(
+        syminfo.tickerid,
+        TF_1H,
+        close)
+
+float high1H =
+    request.security(
+        syminfo.tickerid,
+        TF_1H,
+        high)
+
+float low1H =
+    request.security(
+        syminfo.tickerid,
+        TF_1H,
+        low)
+
+//---------------- 4H ----------------//
+
+float close4H =
+    request.security(
+        syminfo.tickerid,
+        TF_4H,
+        close)
+
+float high4H =
+    request.security(
+        syminfo.tickerid,
+        TF_4H,
+        high)
+
+float low4H =
+    request.security(
+        syminfo.tickerid,
+        TF_4H,
+        low)
+
+//=============================================================================
+// RSI ENGINE
+//=============================================================================
+
+float rsi15 =
+    request.security(
+        syminfo.tickerid,
+        TF_15M,
+        ta.rsi(close,rsiLength))
+
+float rsi1H =
+    request.security(
+        syminfo.tickerid,
+        TF_1H,
+        ta.rsi(close,rsiLength))
+
+float rsi4H =
+    request.security(
+        syminfo.tickerid,
+        TF_4H,
+        ta.rsi(close,rsiLength))
+
+//=============================================================================
+// RSI STATUS FUNCTION
+//=============================================================================
+
+f_getRSIStatus(float value)=>
+
+    string result="Neutral"
+
+    if value>=rsiOB
+        result:="OverBought"
+
+    else if value<=rsiOS
+        result:="OverSold"
+
+    result
+
+string rsiStatus15 = f_getRSIStatus(rsi15)
+string rsiStatus1H = f_getRSIStatus(rsi1H)
+string rsiStatus4H = f_getRSIStatus(rsi4H)
+
+//=============================================================================
+// GLOBAL STATE VARIABLES
+//=============================================================================
+
+var string trend15 = "Neutral"
+var string trend1H = "Neutral"
+var string trend4H = "Neutral"
+
+var string lastBos15 = "-"
+var string lastBos1H = "-"
+var string lastBos4H = "-"
+
+var string lastChoch15 = "-"
+var string lastChoch1H = "-"
+var string lastChoch4H = "-"
+
+var int score15 = 0
+var int score1H = 0
+var int score4H = 0
+
+//=============================================================================
+// OBJECT ARRAYS (Future Modules)
+//=============================================================================
+
+var array<box> bullishFVG = array.new_box()
+var array<box> bearishFVG = array.new_box()
+
+var array<box> bullishOB = array.new_box()
+var array<box> bearishOB = array.new_box()
+
+var array<box> bullishBB = array.new_box()
+var array<box> bearishBB = array.new_box()
+
+var array<box> supplyZones = array.new_box()
+var array<box> demandZones = array.new_box()
+//=============================================================================
+// SMC ENGINE
+// Trend Bias Foundation
+//=============================================================================
+
+f_trend(float closePrice, float emaFast, float emaSlow)=>
+
+    string trend = "NEUTRAL"
+
+    if emaFast > emaSlow and closePrice > emaFast
+        trend := "BULLISH"
+
+    else if emaFast < emaSlow and closePrice < emaFast
+        trend := "BEARISH"
+
+    trend
+
+//=============================================================================
+// EMA ENGINE
+//=============================================================================
+
+ema50_15 =
+    request.security(
+        syminfo.tickerid,
+        TF_15M,
+        ta.ema(close,50))
+
+ema200_15 =
+    request.security(
+        syminfo.tickerid,
+        TF_15M,
+        ta.ema(close,200))
+
+ema50_1H =
+    request.security(
+        syminfo.tickerid,
+        TF_1H,
+        ta.ema(close,50))
+
+ema200_1H =
+    request.security(
+        syminfo.tickerid,
+        TF_1H,
+        ta.ema(close,200))
+
+ema50_4H =
+    request.security(
+        syminfo.tickerid,
+        TF_4H,
+        ta.ema(close,50))
+
+ema200_4H =
+    request.security(
+        syminfo.tickerid,
+        TF_4H,
+        ta.ema(close,200))
+
+//=============================================================================
+// TREND UPDATE
+//=============================================================================
+
+trend15 := f_trend(close15,ema50_15,ema200_15)
+trend1H := f_trend(close1H,ema50_1H,ema200_1H)
+trend4H := f_trend(close4H,ema50_4H,ema200_4H)
+
+//=============================================================================
+// SCORE RESET
+//=============================================================================
+
+score15 := 0
+score1H := 0
+score4H := 0
+
+//=============================================================================
+// SCORE FROM TREND
+//=============================================================================
+
+if trend15=="BULLISH"
+    score15+=20
+
+if trend15=="BEARISH"
+    score15+=20
+
+if trend1H=="BULLISH"
+    score1H+=20
+
+if trend1H=="BEARISH"
+    score1H+=20
+
+if trend4H=="BULLISH"
+    score4H+=20
+
+if trend4H=="BEARISH"
+    score4H+=20
